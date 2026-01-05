@@ -54,24 +54,41 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-// Initialize database and start server
-const startServer = async () => {
+// Initialize database
+let dbInitialized = false;
+const initialize = async () => {
+  if (dbInitialized) return;
   try {
     await initDatabase();
-    
-    // Start reminder scheduler after database is ready
     startReminderScheduler();
-    
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`📊 Database connected`);
-      console.log(`🌐 API available at http://localhost:${PORT}/api`);
-    });
+    dbInitialized = true;
+    console.log('✅ Database initialized and scheduler started');
   } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
+    console.error('❌ Database initialization failed:', error);
   }
 };
 
-startServer();
+// Middleware to ensure DB is initialized
+app.use(async (req, res, next) => {
+  await initialize();
+  next();
+});
+
+// Start server locally
+if (process.env.NODE_ENV !== 'production') {
+  const startServer = async () => {
+    try {
+      await initialize();
+      app.listen(PORT, () => {
+        console.log(`🚀 Server running on port ${PORT}`);
+        console.log(`🌐 API available at http://localhost:${PORT}/api`);
+      });
+    } catch (error) {
+      console.error('Failed to start local server:', error);
+    }
+  };
+  startServer();
+}
+
+export default app;
 
