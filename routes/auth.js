@@ -6,6 +6,48 @@ import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// Register
+router.post('/register', async (req, res) => {
+  try {
+    const { email, password, name, role } = req.body;
+
+    if (!email || !password || !name) {
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    // Default to student if not provided
+    const userRole = role || 'student';
+
+    // Only allow students to register publicly
+    if (userRole !== 'student') {
+      return res.status(403).json({ error: 'Only student registration is allowed publicly' });
+    }
+
+    // Check if email already exists
+    const existingUser = await pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({ error: 'Email already exists' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const result = await pool.query(
+      `INSERT INTO users (email, password_hash, name, role)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, email, name, role, created_at`,
+      [email.toLowerCase(), hashedPassword, name, userRole]
+    );
+
+    res.status(201).json({
+      message: 'User registered successfully',
+      user: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Login
 router.post('/login', async (req, res) => {
   try {
