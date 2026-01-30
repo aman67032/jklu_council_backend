@@ -191,7 +191,7 @@ const initDatabase = async () => {
     const clubs = [
       { name: 'Technology Club', slug: 'technology-club', council: 'technical-affairs' },
       { name: 'Robotics Club', slug: 'robotics-club', council: 'technical-affairs' },
-      { name: 'Astro Club', slug: 'astro-club', council: 'technical-affairs' },
+      { name: 'Astronomy Club', slug: 'astronomy-club', council: 'technical-affairs' },
       { name: 'Design Club', slug: 'design-club', council: 'cultural-affairs' },
       { name: 'Business Club', slug: 'business-club', council: 'academic-affairs' },
       { name: 'Competitive Programming (CP) Club', slug: 'cp-club', council: 'technical-affairs' },
@@ -216,6 +216,9 @@ const initDatabase = async () => {
         );
       }
     }
+
+    // Migration: Rename Astro Club to Astronomy Club if it exists with old slug
+    await pool.query(`UPDATE clubs SET name = 'Astronomy Club', slug = 'astronomy-club' WHERE slug = 'astro-club'`);
 
     console.log('✅ Default councils and clubs created');
   } catch (error) {
