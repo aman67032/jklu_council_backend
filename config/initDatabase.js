@@ -217,8 +217,32 @@ const initDatabase = async () => {
       }
     }
 
-    // Migration: Rename Astro Club to Astronomy Club if it exists with old slug
-    await pool.query(`UPDATE clubs SET name = 'Astronomy Club', slug = 'astronomy-club' WHERE slug = 'astro-club'`);
+    // Migration: Handle potential 'astro-club' to 'astronomy-club' transition
+    const oldClub = await pool.query("SELECT id FROM clubs WHERE slug = 'astro-club'");
+    if (oldClub.rows.length > 0) {
+      const newClub = await pool.query("SELECT id FROM clubs WHERE slug = 'astronomy-club'");
+      
+      if (newClub.rows.length > 0) {
+        // Both exist: migrate data to new club and delete old one
+        const oldId = oldClub.rows[0].id;
+        const newId = newClub.rows[0].id;
+        
+        console.log(`Migrating data from 'astro-club' (id: ${oldId}) to 'astronomy-club' (id: ${newId})`);
+        
+        // Update references in events
+        await pool.query("UPDATE events SET club_id = $1 WHERE club_id = $2", [newId, oldId]);
+        
+        // Update references in announcements
+        await pool.query("UPDATE announcements SET club_id = $1 WHERE club_id = $2", [newId, oldId]);
+        
+        // Delete old club
+        await pool.query("DELETE FROM clubs WHERE id = $1", [oldId]);
+      } else {
+        // Only old club exists: rename it
+        await pool.query("UPDATE clubs SET name = 'Astronomy Club', slug = 'astronomy-club' WHERE slug = 'astro-club'");
+        console.log("Renamed 'astro-club' to 'Astronomy Club'");
+      }
+    }
 
     console.log('✅ Default councils and clubs created');
   } catch (error) {

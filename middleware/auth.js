@@ -10,7 +10,7 @@ export const authenticate = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
+
     // Verify user still exists and is active
     const result = await pool.query(
       'SELECT id, email, name, role, is_active FROM users WHERE id = $1',
@@ -21,7 +21,29 @@ export const authenticate = async (req, res, next) => {
       return res.status(401).json({ error: 'User not found or inactive' });
     }
 
-    req.user = result.rows[0];
+    const user = result.rows[0];
+
+    // Fetch associated entity (Club or Council)
+    if (['club_chair', 'club_co_chair', 'club_secretary', 'club_general_secretary'].includes(user.role)) {
+      const clubResult = await pool.query(
+        `SELECT id, name FROM clubs 
+         WHERE chair_id = $1 OR co_chair_id = $1 OR secretary_id = $1 OR general_secretary_id = $1`,
+        [user.id]
+      );
+      if (clubResult.rows.length > 0) {
+        user.managed_club = clubResult.rows[0];
+      }
+    } else if (['council_admin', 'president', 'head_student_affairs', 'executive_student_affairs'].includes(user.role)) {
+      const councilResult = await pool.query(
+        'SELECT id, name FROM councils WHERE admin_id = $1',
+        [user.id]
+      );
+      if (councilResult.rows.length > 0) {
+        user.managed_council = councilResult.rows[0];
+      }
+    }
+
+    req.user = user;
     next();
   } catch (error) {
     return res.status(401).json({ error: 'Invalid or expired token' });

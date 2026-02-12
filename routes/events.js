@@ -151,7 +151,8 @@ router.post('/', authenticate, async (req, res) => {
       end_date,
       registration_deadline,
       max_participants,
-      certificate_eligible
+      certificate_eligible,
+      image_url
     } = req.body;
 
     if (!title || !event_type || !start_date || !end_date) {
@@ -161,9 +162,9 @@ router.post('/', authenticate, async (req, res) => {
     const result = await pool.query(
       `INSERT INTO events (
         title, description, event_type, council_id, club_id, created_by,
-        venue, start_date, end_date, registration_deadline, max_participants, certificate_eligible, status
+        venue, start_date, end_date, registration_deadline, max_participants, certificate_eligible, status, image_url
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pending')
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pending', $13)
       RETURNING *`,
       [
         title,
@@ -177,7 +178,8 @@ router.post('/', authenticate, async (req, res) => {
         end_date,
         registration_deadline || null,
         max_participants || null,
-        certificate_eligible || false
+        certificate_eligible || false,
+        image_url || null
       ]
     );
 
@@ -210,6 +212,61 @@ router.post('/:id/approve', authenticate, async (req, res) => {
     res.json({ event: result.rows[0] });
   } catch (error) {
     console.error('Approve event error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update event
+router.put('/:id', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      title, description, event_type, council_id, club_id,
+      venue, start_date, end_date, registration_deadline,
+      max_participants, certificate_eligible, image_url
+    } = req.body;
+
+    // Check permissions: Super Admin or specific roles
+    if (!canCreateEvents(req.user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+
+    // Verify event ownership or super admin status
+    const eventCheck = await pool.query('SELECT created_by, status FROM events WHERE id = $1', [id]);
+    if (eventCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+
+    const event = eventCheck.rows[0];
+
+    // Allow update if Super Admin OR (Creator AND Event is Pending)
+    // Note: Adjust logic if creators should edit approved events
+    const isSuperAdmin = req.user.role === 'super_admin';
+    const isCreator = event.created_by === req.user.id;
+
+    if (!isSuperAdmin && !isCreator) {
+      return res.status(403).json({ error: 'You can only edit your own events' });
+    }
+
+    const result = await pool.query(
+      `UPDATE events SET
+        title = $1, description = $2, event_type = $3, council_id = $4, club_id = $5,
+        venue = $6, start_date = $7, end_date = $8, registration_deadline = $9,
+        max_participants = $10, certificate_eligible = $11, image_url = $12,
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id = $13
+       RETURNING *`,
+      [
+        title, description, event_type, council_id || null, club_id || null,
+        venue, start_date, end_date, registration_deadline || null,
+        max_participants || null, certificate_eligible || false, image_url || null,
+        id
+      ]
+    );
+
+    res.json({ event: result.rows[0] });
+  } catch (error) {
+    console.error('Update event error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
